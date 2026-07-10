@@ -1521,7 +1521,7 @@
                 const res = await fetch('/api/proxy/config', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': auth },
-                    body: JSON.stringify({ "0": val, "country": val, "port": port, "switch_trigger": Date.now() })
+                    body: JSON.stringify({ "0": val, "country": val, "port": port })
                 });
                 const text = await res.text();
                 if (!res.ok) throw new Error(text || res.status);
