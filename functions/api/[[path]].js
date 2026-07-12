@@ -397,6 +397,12 @@ async function verifyAgent(authHeader, ip, db, env) {
     return false;
 }
 
+async function isLegacyAgent(authHeader, ip, db, env) {
+    if (!authHeader || !ip || env.LEGACY_AGENT_AUTH === 'false' || Date.now() >= Date.UTC(2026, 7, 1)) return false;
+    const server = await db.prepare("SELECT ip FROM servers WHERE ip = ?").bind(ip).first();
+    return !!server && authHeader === await sha256(env.ADMIN_PASSWORD || "admin");
+}
+
 // ==============================================
 // 探针纯净 API 子系统处理
 // ==============================================
@@ -789,7 +795,12 @@ export async function onRequest(context) {
         const data = await request.json(); 
         const nowMs = Date.now();
         const vpsIp = data.ip;
-        if (!(await verifyAgent(request.headers.get("Authorization"), vpsIp, db, env))) return new Response("Unauthorized", { status: 401 });
+        const authHeader = request.headers.get("Authorization");
+        if (!(await verifyAgent(authHeader, vpsIp, db, env))) return new Response("Unauthorized", { status: 401 });
+        if (!data.report_id && await isLegacyAgent(authHeader, vpsIp, db, env)) {
+            const legacyFingerprint = JSON.stringify([vpsIp, data.net_rx || '0', data.net_tx || '0', data.node_traffic || []]);
+            data.report_id = `legacy:${vpsIp}:${await sha256(legacyFingerprint)}`;
+        }
         if (!data.report_id) return Response.json({ error: "report_id is required" }, { status: 400 });
         const duplicateReport = !!(await db.prepare("SELECT report_id FROM report_receipts WHERE report_id = ? AND applied = 1").bind(data.report_id).first());
 
