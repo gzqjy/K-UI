@@ -28,6 +28,7 @@ PROXY_PORT = 7920
 target_country = "JP"
 last_switch_trigger = 0
 last_config_sync = 0
+last_config_log = ""
 
 state_lock = threading.Lock()
 dead_ips = set()
@@ -109,7 +110,6 @@ def fetch_controller_config():
             raw = res.read().decode("utf-8")
             data = json.loads(raw)
             if isinstance(data, dict) and (data.get("0") or data.get("country")):
-                print(f"[cfg] 拉取配置成功: {raw}", flush=True)
                 return data
             else:
                 print(f"[cfg] 端点返回数据缺少地区字段(0/country)，跳过: {raw}", flush=True)
@@ -118,7 +118,7 @@ def fetch_controller_config():
     return None
 
 def update_config_loop():
-    global target_country, last_switch_trigger, PROXY_PORT, tun_main, tun_backup
+    global target_country, last_switch_trigger, PROXY_PORT, tun_main, tun_backup, last_config_log
     while True:
         try:
             data = fetch_controller_config()
@@ -128,6 +128,10 @@ def update_config_loop():
             desired_country = str(data.get("0") or data.get("country") or "JP").upper()
             switch_trigger = int(data.get("switch_trigger", 0))
             new_port = int(data.get("port", 7920))
+            config_log = f"country={desired_country}, port={new_port}, trigger={switch_trigger}"
+            if config_log != last_config_log:
+                print(f"[cfg] 配置同步: {config_log}", flush=True)
+                last_config_log = config_log
             # 同步代理凭证到 proxy_server 模块（让其实时生效，无需重启进程）
             try:
                 pc = data.get("proxy") or {}
@@ -141,11 +145,10 @@ def update_config_loop():
                     else:
                         proxy_server.PROXY_USER = pu.encode()
                         proxy_server.PROXY_PASS = pp.encode()
-                    print(f"[cfg] 凭证同步: user={pu}, pass={'*' * len(pp)}", flush=True)
+                    if not pu or not pp:
+                        print("[cfg] 代理凭证未配置，监听器保持拒绝连接状态", flush=True)
             except Exception as e:
                 print(f"[cfg] 凭证同步失败: {e}", flush=True)
-            print(f"[cfg] 解析: country={desired_country}, port={new_port}, trigger={switch_trigger}, current_country={target_country}", flush=True)
-                
             if new_port != PROXY_PORT:
                 print(f"[*] 收到端口变更指令 ({PROXY_PORT} -> {new_port})，重启守护进程...", flush=True)
                 os._exit(0)
@@ -263,6 +266,7 @@ def setup_routing(tun_name: str, table_id: int):
 def connect_node(tun: Tunnel, node: dict):
     global dead_ips
     try:
+        print(f"[*] {tun.name} 开始拨号: {node['country']} {node['ip']} (ping={node['ping']})", flush=True)
         cfg_path = CONFIG_DIR / f"{tun.name}.ovpn"
         log_file = WORKSPACE / f"{tun.name}_err.log"
         cfg_path.write_text(node["config"], encoding="utf-8")
@@ -391,6 +395,11 @@ def connect_node(tun: Tunnel, node: dict):
             role = "主网卡" if proxy_server.ACTIVE_BIND == tun.name else "备用网卡"
             print(f"[+] {tun.name} ({role}) 完全就绪: 入口 {node['ip']} -> 出口 {egress_ip}", flush=True)
         else:
+            try:
+                error_tail = "\n".join(log_file.read_text(errors="replace").splitlines()[-12:])
+            except Exception:
+                error_tail = "无法读取 OpenVPN 日志"
+            print(f"[-] {tun.name} 建连失败: {node['ip']}\n{error_tail}", flush=True)
             penalize_node(node["ip"], 5000)  # 建连超时中度惩罚
             try: process.terminate(); process.wait(2)
             except: process.kill()
@@ -461,6 +470,10 @@ def get_best_candidate():
                 candidates = [n for n in all_pool_nodes if n["country"] == target_country and n["ip"] not in active_ips]
 
         if candidates: return candidates.pop(0)
+        country_counts = {}
+        for node in all_pool_nodes:
+            country_counts[node["country"]] = country_counts.get(node["country"], 0) + 1
+        print(f"[!] 无可用 {target_country} 候选；节点分布={country_counts}，黑名单={len(dead_ips)}", flush=True)
     return None
 
 def maintain_pool():

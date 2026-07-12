@@ -272,6 +272,13 @@ EOF
 }
 
 main() {
+    if [ "$INIT_SYS" = "systemd" ]; then
+        systemctl stop proxy-lite 2>/dev/null || true
+        systemctl disable proxy-lite 2>/dev/null || true
+    elif [ "$INIT_SYS" = "openrc" ]; then
+        rc-service proxy-lite stop 2>/dev/null || true
+        rc-update del proxy-lite default >/dev/null 2>&1 || true
+    fi
     pkill -f "python3 -u lite_manager.py" >/dev/null 2>&1 || true
     pkill -f "openvpn.*tun_main|tun_backup" >/dev/null 2>&1 || true
     rm -f /opt/proxy_lite/lite_manager.py /opt/proxy_lite/proxy_server.py /opt/proxy_lite/run.sh
