@@ -179,9 +179,20 @@ def _load_or_create_warp_profile():
     wgcf = _ensure_wgcf()
     workdir = tempfile.mkdtemp(prefix="kui-warp-", dir="/opt/kui")
     try:
-        registered = subprocess.run([wgcf, "register", "--accept-tos"], cwd=workdir, capture_output=True, text=True, timeout=60)
-        if registered.returncode != 0:
-            raise RuntimeError(f"WARP registration failed: {(registered.stderr or registered.stdout).strip()[-300:]}")
+        registered = None
+        for attempt in range(5):
+            registered = subprocess.run([wgcf, "register", "--accept-tos"], cwd=workdir, capture_output=True, text=True, timeout=60)
+            if registered.returncode == 0:
+                break
+            err_msg = (registered.stderr or registered.stdout).strip()
+            if "429" in err_msg and attempt < 4:
+                delay = 15 * (2 ** attempt)
+                print(f"[agent] WARP registration rate-limited, retrying in {delay}s ({attempt+1}/5)", flush=True)
+                time.sleep(delay)
+                continue
+            raise RuntimeError(f"WARP registration failed: {err_msg[-300:]}")
+        if registered is None or registered.returncode != 0:
+            raise RuntimeError("WARP registration failed after 5 attempts")
         generated = subprocess.run([wgcf, "generate"], cwd=workdir, capture_output=True, text=True, timeout=30)
         if generated.returncode != 0:
             raise RuntimeError(f"WARP profile generation failed: {(generated.stderr or generated.stdout).strip()[-300:]}")
