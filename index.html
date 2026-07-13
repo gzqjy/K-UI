@@ -491,8 +491,7 @@
                                     <div class="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] font-black text-amber-700">⚠ 填写 SOCKS5 代理地址后点击全局/局部代理按钮应用。</div>
                                 </div>
                                 <div v-if="egressModeOf(vps) === 'native'" class="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] font-black text-amber-700">VPS 本机原生网络出口，不经过任何代理或隧道。</div>
-                                <div v-if="egressModeOf(vps) === 'residential'" class="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] font-black text-amber-700">⚠ 住宅 IP 出口与 WARP 出口不能同时启用；住宅出口自动使用本机 ACTIVE 隧道，无需填写地址或密码。</div>
-                                <div v-if="egressModeOf(vps).startsWith('warp_')" class="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] font-black text-amber-700">⚠ WARP Warp 出口基于 WireGuard 隧道，不会与住宅/SOCKS5 出口冲突。</div>
+                                <div v-if="egressModeOf(vps).startsWith('warp_')" class="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] font-black text-amber-700">⚠ WARP 出口基于 WireGuard 隧道，不会与住宅/SOCKS5 出口冲突。</div>
                                 <div class="mt-3 text-[10px] font-bold" :class="vps.egress_status === 'pending' ? 'text-amber-500' : (vps.egress_status === 'failed' ? 'text-rose-500' : 'text-slate-500')">
                                     <span v-if="vps.egress_status === 'pending'">● 期望 {{ egressModeLabel(vps.egress_mode) }}，正在实时下发...</span>
                                     <span v-else-if="vps.egress_status === 'applied'">● 实际已应用 {{ egressModeLabel(vps.egress_applied_mode) }}<span v-if="vps.egress_ip" class="ml-1 font-mono text-indigo-500">({{ vps.egress_ip }})</span></span>
