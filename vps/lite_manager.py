@@ -55,7 +55,7 @@ last_http_report = 0
 REALTIME_HTTP_INTERVAL = 900
 REALTIME_STATUS_ACTIVE_INTERVAL = 5
 REALTIME_STATUS_IDLE_INTERVAL = 30
-realtime_status_interval = REALTIME_STATUS_IDLE_INTERVAL
+realtime_status_interval = REALTIME_STATUS_ACTIVE_INTERVAL
 
 state_lock = threading.Lock()
 dead_ips = set()

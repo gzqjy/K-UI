@@ -348,7 +348,7 @@ def check_for_update():
 # Durable Objects switch routine metric snapshots to a lower rate.
 REALTIME_STATUS_ACTIVE_INTERVAL = 5
 REALTIME_STATUS_IDLE_INTERVAL = 30
-realtime_status_interval = REALTIME_STATUS_IDLE_INTERVAL
+realtime_status_interval = REALTIME_STATUS_ACTIVE_INTERVAL
 global_interval = REALTIME_STATUS_ACTIVE_INTERVAL
 fast_mode = False
 config_wakeup = threading.Event()
