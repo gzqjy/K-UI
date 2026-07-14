@@ -1401,7 +1401,7 @@
                     if (!confirm(`🚀 极速部署确认：\n\n系统将按照 FSCARMEN 模式，向该服务器并发下发完整 ${protocolSequence.length} 个协议矩阵：\n` + protocolSequence.map(p => `- ${p.protocol} (端口: ${startPort + p.offset})`).join('\n') + `\n\n所有节点归属: ${commonUser}\n\n确认立刻组建节点矩阵吗？`)) return;
                     const failures = [];
                     for (let item of protocolSequence) {
-                        const payload = { id: Date.now().toString() + Math.floor(Math.random() * 10000), uuid: commonUUID, vps_ip: ip, protocol: item.protocol, port: startPort + item.offset, username: commonUser, traffic_limit: 0, expire_time: 0, sni: item.sni || '' };
+                        const payload = { id: Date.now().toString() + Math.floor(Math.random() * 10000), uuid: commonUUID, vps_ip: ip, protocol: item.protocol, port: startPort + item.offset, username: commonUser, traffic_limit: 0, expire_time: 0, sni: item.sni || '', network: item.protocol === 'H2-Reality' ? 'http' : (item.protocol === 'gRPC-Reality' ? 'grpc' : 'tcp') };
                         if (item.type === 'reality') { const keys = generateRealityKeys(); payload.private_key = keys.privateKey; payload.public_key = keys.publicKey; payload.short_id = keys.shortId; } else if (item.protocol === 'Naive') { payload.uuid = commonUUID.replace(/-/g, '').substring(0, 16); payload.private_key = payload.uuid; } else { const array = new Uint8Array(16); crypto.getRandomValues(array); payload.private_key = btoa(String.fromCharCode.apply(null, array)); }
                         try { await fetchApi('/api/nodes', { method: 'POST', body: JSON.stringify(payload) }); } catch(e) { failures.push(`${item.protocol}: ${e.message || '失败'}`); }
                     }
