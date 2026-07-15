@@ -259,13 +259,7 @@ npm install
 npx wrangler login
 ```
 
-编辑 `wrangler.jsonc`，将以下内容替换成真实值：
-
-```jsonc
-"PAGES_ORIGIN": "https://你的项目.pages.dev"
-```
-
-并确认 `d1_databases` 使用 Pages 第 2 步创建的同一个数据库：
+确认 `wrangler.jsonc` 的 `d1_databases` 使用 Pages 第 2 步创建的同一个数据库：
 
 ```jsonc
 "d1_databases": [
@@ -504,11 +498,10 @@ DB → 正确的 D1 数据库
 
 依次检查：
 
-1. Worker 的 `PAGES_ORIGIN` 是否为当前 Pages 地址。
-2. Worker 的 `DB` 是否与 Pages 使用同一个 D1。
-3. Pages Production 是否设置 `REALTIME_URL`。
-4. `REALTIME_URL` 是否使用 HTTPS，末尾是否多了 `/`。
-5. 浏览器是否重新登录并刷新页面。
+1. Worker 的 `DB` 是否与 Pages 使用同一个 D1。
+2. Pages Production 是否设置 `REALTIME_URL`。
+3. `REALTIME_URL` 是否使用 HTTPS，末尾是否多了 `/`。
+4. 浏览器是否重新登录并刷新页面。
 
 ## Agent 返回 401 或 403
 
@@ -602,9 +595,9 @@ npx wrangler login
 
 编辑 `wrangler.jsonc`：
 
-- 填写真实的 `PAGES_ORIGIN`。
 - 填写 Pages 正在使用的 `database_name`。
 - 填写同一个 D1 的 `database_id`。
+- 使用默认 `*.pages.dev` 域名时不需要配置 `PAGES_ORIGIN`。使用自定义域名时，在 Worker 环境变量中设置 `PAGES_ORIGIN=https://你的自定义域名`。
 
 然后执行：
 

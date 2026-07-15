@@ -32,12 +32,26 @@ function json(data, status = 200, extraHeaders = {}) {
 }
 
 function pagesOrigins(env) {
-  return String(env.PAGES_ORIGIN || "https://k-ui2.pages.dev").split(",").map(origin => origin.trim().replace(/\/$/, "")).filter(origin => /^https:\/\//.test(origin));
+  return String(env.PAGES_ORIGIN || "").split(",").map(origin => origin.trim().replace(/\/$/, "")).filter(origin => /^https:\/\//.test(origin));
+}
+
+function isPagesDevOrigin(origin) {
+  try { return new URL(origin).protocol === "https:" && /^[a-z0-9-]+\.pages\.dev$/i.test(new URL(origin).hostname); } catch { return false; }
+}
+
+function isAllowedPagesOrigin(origin, env) {
+  const configured = pagesOrigins(env);
+  return configured.length ? configured.includes(origin) : isPagesDevOrigin(origin);
+}
+
+function requestPagesOrigin(request, env) {
+  const candidates = [request.headers.get("X-KUI-Pages-Origin"), request.headers.get("Origin")].filter(Boolean);
+  return candidates.find(origin => isAllowedPagesOrigin(origin, env)) || "";
 }
 
 function cors(request, env) {
   const requested = request.headers.get("Origin") || "";
-  const origin = pagesOrigins(env).includes(requested) ? requested : "null";
+  const origin = isAllowedPagesOrigin(requested, env) ? requested : "null";
   return {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Headers": "Authorization, Content-Type",
@@ -70,10 +84,12 @@ function compactRoleState(role, data) {
   return { details: Array.isArray(data?.details) ? data.details.slice(0, 4).map(item => ({ tunnel: String(item?.tunnel || "").slice(0, 32), active: item?.active === true, node_ip: String(item?.node_ip || "").slice(0, 64), exit_ip: String(item?.exit_ip || "").slice(0, 64), country: String(item?.country || "").slice(0, 2), port: Number(item?.port) || 0, ready: item?.ready === true, connected_time: Math.max(0, Math.min(Number(item?.connected_time) || 0, 31536000)) })) : [] };
 }
 
-async function verifyAdmin(header, env) {
+async function verifyAdmin(header, request, env) {
   try {
     if (!header) return false;
-    for (const origin of pagesOrigins(env)) {
+    const configured = pagesOrigins(env);
+    const origins = configured.length ? configured : [requestPagesOrigin(request, env)].filter(Boolean);
+    for (const origin of origins) {
       const response = await fetch(`${origin}/api/realtime_auth`, {
         method: "POST",
         headers: { Authorization: header, "Content-Type": "application/json" },
@@ -116,7 +132,7 @@ export default {
     }
 
     if (url.pathname === "/dashboard/ticket" && request.method === "POST") {
-      if (!(await verifyAdmin(request.headers.get("Authorization"), env))) return json({ error: "Forbidden" }, 403, cors(request, env));
+      if (!(await verifyAdmin(request.headers.get("Authorization"), request, env))) return json({ error: "Forbidden" }, 403, cors(request, env));
       const hub = env.DASHBOARD_HUB.get(env.DASHBOARD_HUB.idFromName("main"));
       const response = await hub.fetch(new Request("https://hub.internal/ticket", { method: "POST", headers: { "X-KUI-USER": "admin" } }));
       return new Response(response.body, { status: response.status, headers: { ...Object.fromEntries(response.headers), ...cors(request, env) } });
@@ -124,14 +140,14 @@ export default {
 
     if (url.pathname === "/dashboard/ws") {
       if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") return json({ error: "WebSocket required" }, 426);
-      if (!pagesOrigins(env).includes(request.headers.get("Origin") || "")) return json({ error: "Forbidden origin" }, 403);
+      if (!isAllowedPagesOrigin(request.headers.get("Origin") || "", env)) return json({ error: "Forbidden origin" }, 403);
       const hub = env.DASHBOARD_HUB.get(env.DASHBOARD_HUB.idFromName("main"));
       return hub.fetch(doRequest(`/ws?ticket=${encodeURIComponent(url.searchParams.get("ticket") || "")}`, request));
     }
 
     if (url.pathname === "/public/ws") {
       if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") return json({ error: "WebSocket required" }, 426);
-      if (!pagesOrigins(env).includes(request.headers.get("Origin") || "")) return json({ error: "Forbidden origin" }, 403);
+      if (!isAllowedPagesOrigin(request.headers.get("Origin") || "", env)) return json({ error: "Forbidden origin" }, 403);
       const setting = await env.DB.prepare("SELECT value FROM probe_settings WHERE key = 'is_public'").first();
       if (setting && setting.value !== "true") return json({ error: "Private dashboard" }, 403);
       const hub = env.DASHBOARD_HUB.get(env.DASHBOARD_HUB.idFromName("main"));
@@ -139,14 +155,14 @@ export default {
     }
 
     if (url.pathname === "/dashboard/snapshot") {
-      if (!(await verifyAdmin(request.headers.get("Authorization"), env))) return json({ error: "Forbidden" }, 403, cors(request, env));
+      if (!(await verifyAdmin(request.headers.get("Authorization"), request, env))) return json({ error: "Forbidden" }, 403, cors(request, env));
       const hub = env.DASHBOARD_HUB.get(env.DASHBOARD_HUB.idFromName("main"));
       const response = await hub.fetch(new Request("https://hub.internal/snapshot"));
       return new Response(response.body, { status: response.status, headers: { ...Object.fromEntries(response.headers), ...cors(request, env) } });
     }
 
     if (url.pathname === "/notify" && request.method === "POST") {
-      if (!(await verifyAdmin(request.headers.get("Authorization"), env))) return json({ error: "Forbidden" }, 403, cors(request, env));
+      if (!(await verifyAdmin(request.headers.get("Authorization"), request, env))) return json({ error: "Forbidden" }, 403, cors(request, env));
       const body = await request.json().catch(() => ({}));
       const ips = body.ip ? [body.ip] : (await env.DB.prepare("SELECT ip FROM servers").all()).results.map(row => row.ip);
       await Promise.all(ips.slice(0, 100).map(ip => {
@@ -157,7 +173,7 @@ export default {
     }
 
     if (url.pathname === "/public-policy" && request.method === "POST") {
-      if (!(await verifyAdmin(request.headers.get("Authorization"), env))) return json({ error: "Forbidden" }, 403, cors(request, env));
+      if (!(await verifyAdmin(request.headers.get("Authorization"), request, env))) return json({ error: "Forbidden" }, 403, cors(request, env));
       const body = await request.json().catch(() => ({}));
       const hub = env.DASHBOARD_HUB.get(env.DASHBOARD_HUB.idFromName("main"));
       const response = await hub.fetch(new Request("https://hub.internal/public-policy", { method: "POST", headers: { "X-KUI-Public": body.public === true ? "1" : "0" } }));
@@ -165,7 +181,7 @@ export default {
     }
 
     if (url.pathname === "/frequency-policy" && request.method === "POST") {
-      if (!(await verifyAdmin(request.headers.get("Authorization"), env))) return json({ error: "Forbidden" }, 403, cors(request, env));
+      if (!(await verifyAdmin(request.headers.get("Authorization"), request, env))) return json({ error: "Forbidden" }, 403, cors(request, env));
       const policy = validFrequencyPolicy(await request.json().catch(() => null));
       if (!policy) return json({ error: "Invalid frequency policy" }, 400, cors(request, env));
       const hub = env.DASHBOARD_HUB.get(env.DASHBOARD_HUB.idFromName("main"));

@@ -98,14 +98,14 @@ async function realtimeAdminHeader(env) {
     return `${btoa(username)}.${timestamp}.${nonce}.${signatureHex}`;
 }
 
-async function notifyRealtimePublicPolicy(env, db, enabled) {
+async function notifyRealtimePublicPolicy(env, db, enabled, pagesOrigin = '') {
     const authorization = await realtimeAdminHeader(env);
     if (!authorization) return;
     const configured = env.REALTIME_URL || (await db.prepare("SELECT val FROM sys_config WHERE key = 'realtime_url'").first())?.val;
     if (!configured || !/^https:\/\//i.test(configured)) return;
     await fetch(`${configured.replace(/\/$/, '')}/public-policy`, {
         method: 'POST',
-        headers: { Authorization: authorization, 'Content-Type': 'application/json' },
+        headers: { Authorization: authorization, 'Content-Type': 'application/json', 'X-KUI-Pages-Origin': pagesOrigin },
         body: JSON.stringify({ public: enabled }),
     });
 }
@@ -118,23 +118,23 @@ function realtimeFrequencyPolicy(settings = {}) {
     return { admin, public: publicInterval, idle };
 }
 
-async function notifyRealtimeFrequencyPolicy(env, db, settings) {
+async function notifyRealtimeFrequencyPolicy(env, db, settings, pagesOrigin = '') {
     const policy = realtimeFrequencyPolicy(settings);
     const authorization = await realtimeAdminHeader(env);
     const configured = env.REALTIME_URL || (await db.prepare("SELECT val FROM sys_config WHERE key = 'realtime_url'").first())?.val;
     if (!policy || !authorization || !configured || !/^https:\/\//i.test(configured)) return;
     await fetch(`${configured.replace(/\/$/, '')}/frequency-policy`, {
         method: 'POST',
-        headers: { Authorization: authorization, 'Content-Type': 'application/json' },
+        headers: { Authorization: authorization, 'Content-Type': 'application/json', 'X-KUI-Pages-Origin': pagesOrigin },
         body: JSON.stringify(policy),
     });
 }
 
-async function notifyRealtimeVps(env, db, ip) {
+async function notifyRealtimeVps(env, db, ip, pagesOrigin = '') {
     const authorization = await realtimeAdminHeader(env);
     const configured = env.REALTIME_URL || (await db.prepare("SELECT val FROM sys_config WHERE key = 'realtime_url'").first())?.val;
     if (!authorization || !configured || !/^https:\/\//i.test(configured)) return;
-    await fetch(`${configured.replace(/\/$/, '')}/notify`, { method: 'POST', headers: { Authorization: authorization, 'Content-Type': 'application/json' }, body: JSON.stringify({ ip }) });
+    await fetch(`${configured.replace(/\/$/, '')}/notify`, { method: 'POST', headers: { Authorization: authorization, 'Content-Type': 'application/json', 'X-KUI-Pages-Origin': pagesOrigin }, body: JSON.stringify({ ip }) });
 }
 
 async function chunkBatch(db, statements, size = 100) {
@@ -685,7 +685,7 @@ async function handleProbeAPI(request, env, context, pathArray) {
                     let cur = 'true'; try { const r = await db.prepare('SELECT value FROM probe_settings WHERE key=?').bind(key).first(); if(r) cur = r.value; } catch(e){}
                     const next = cur === 'true' ? 'false' : 'true';
                     await db.prepare('INSERT INTO probe_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').bind(key, next).run();
-                    if (key === 'is_public') await notifyRealtimePublicPolicy(env, db, next === 'true').catch(() => {});
+                    if (key === 'is_public') await notifyRealtimePublicPolicy(env, db, next === 'true', url.origin).catch(() => {});
                     await tgSend(chatId, `✅ 属性 ${key} 已成功切换！`);
                 }
             }
@@ -762,8 +762,8 @@ async function handleProbeAPI(request, env, context, pathArray) {
             if (!realtimeFrequencyPolicy(frequencySettings)) return Response.json({ error: 'Invalid realtime frequency policy' }, { status: 400 });
         }
         for (const [k, v] of Object.entries(settings)) { await db.prepare('INSERT INTO probe_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').bind(k, v).run(); }
-        if (Object.prototype.hasOwnProperty.call(settings, 'is_public')) await notifyRealtimePublicPolicy(env, db, settings.is_public === 'true').catch(() => {});
-        if (frequencyKeys.some(key => Object.prototype.hasOwnProperty.call(settings, key))) await notifyRealtimeFrequencyPolicy(env, db, frequencySettings).catch(() => {});
+        if (Object.prototype.hasOwnProperty.call(settings, 'is_public')) await notifyRealtimePublicPolicy(env, db, settings.is_public === 'true', url.origin).catch(() => {});
+        if (frequencyKeys.some(key => Object.prototype.hasOwnProperty.call(settings, key))) await notifyRealtimeFrequencyPolicy(env, db, frequencySettings, url.origin).catch(() => {});
         if (settings.tg_bot_token) {
             try {
                await fetch(`https://api.telegram.org/bot${settings.tg_bot_token}/setWebhook`, {
