@@ -277,6 +277,43 @@ npx wrangler login
 npx wrangler deploy
 ```
 
+### 使用自定义域名时必须设置 PAGES_ORIGIN
+
+默认 Pages 地址形如：
+
+```text
+https://你的项目.pages.dev
+```
+
+不需要设置 `PAGES_ORIGIN`，Realtime Worker 会自动接受该 Pages 域名的 WebSocket 连接。
+
+如果你为 Pages 绑定了自定义域名，例如：
+
+```text
+https://panel.example.com
+```
+
+必须进入 Worker：
+
+```text
+Workers & Pages → kui-realtime → Settings → Variables and Secrets
+```
+
+新增或修改 Worker **Variable**：
+
+| 名称 | 值 |
+|---|---|
+| `PAGES_ORIGIN` | `https://panel.example.com` |
+
+要求：
+
+- 必须包含 `https://`。
+- 末尾不要添加 `/`。
+- 必须填写 Pages 实际对外访问的自定义域名，不是 Worker 地址。
+- 保存变量后重新部署 Worker。
+
+否则 Worker 会拒绝来自自定义域名的 Dashboard / 公开探针 WebSocket，页面会退回旧数据或 HTTP fallback。
+
 ### 备用方法：Cloudflare 一键部署
 
 如果无法使用本地 Node.js，可以使用按钮：
@@ -597,7 +634,7 @@ npx wrangler login
 
 - 填写 Pages 正在使用的 `database_name`。
 - 填写同一个 D1 的 `database_id`。
-- 使用默认 `*.pages.dev` 域名时不需要配置 `PAGES_ORIGIN`。使用自定义域名时，在 Worker 环境变量中设置 `PAGES_ORIGIN=https://你的自定义域名`。
+- 使用默认 `*.pages.dev` 域名时不需要配置 `PAGES_ORIGIN`。**绑定自定义域名后必须**在 Worker 环境变量中设置 `PAGES_ORIGIN=https://你的自定义域名`，保存后重新部署 Worker。
 
 然后执行：
 
